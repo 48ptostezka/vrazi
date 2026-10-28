@@ -40,6 +40,12 @@
   button:focus-visible, input:focus-visible { outline: 3px solid var(--muted); outline-offset: 2px; }
   .info { color: var(--muted); margin: 0; font-variant-numeric: tabular-nums; }
   .error { color: var(--vrah); margin: 0; }
+  #confirm { border: 1px solid var(--line); border-radius: 4px; padding: 12px;
+    display: flex; flex-direction: column; gap: 10px; }
+  #confirm p { margin: 0; }
+  #confirm .buttons { display: flex; gap: 8px; flex-wrap: wrap; }
+  #confirm .buttons button { flex: 1 1 140px; }
+  button.secondary { background: transparent; color: var(--fg); border: 1px solid var(--line); }
   #role { background: var(--panel); border-radius: 4px; min-height: 160px;
     display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
     cursor: pointer; user-select: none; }
@@ -65,6 +71,13 @@
   </div>
 
   <button id="generate">Generovat</button>
+  <div id="confirm" hidden>
+    <p>Přiřazování rolí ještě neskončilo. Opravdu chcete vygenerovat nový seznam? Zbylé role se zahodí.</p>
+    <div class="buttons">
+      <button id="confirmYes">Ano, vygenerovat</button>
+      <button id="confirmNo" class="secondary">Zrušit</button>
+    </div>
+  </div>
   <p id="error" class="error" hidden></p>
 
   <button id="assign" hidden>Přiřadit roli</button>
@@ -116,6 +129,18 @@
   }
 
   $("generate").addEventListener("click", () => {
+    if (list.length > 0) {
+      $("confirm").hidden = false;
+      $("confirmNo").focus();
+      return;
+    }
+    generate();
+  });
+  $("confirmYes").addEventListener("click", generate);
+  $("confirmNo").addEventListener("click", () => { $("confirm").hidden = true; });
+
+  function generate() {
+    $("confirm").hidden = true;
     const o = readCount("obcane"), v = readCount("vrazi"), d = readCount("detektivove");
     if (o === null || v === null || d === null) {
       $("error").textContent = "Počty musí být celá nezáporná čísla.";
@@ -139,7 +164,7 @@
     $("role").hidden = true;
     $("assign").hidden = false;
     updateInfo();
-  });
+  }
 
   $("assign").addEventListener("click", () => {
     if (!list.length || pending) return;
