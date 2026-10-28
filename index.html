@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>
+  :root { color-scheme: light; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+  *, *::before, *::after { box-sizing: border-box; }
+  body { margin: 0; }
+  [hidden] { display: none !important; }
+</style>
+<title>Vrazi – role</title>
+<style>
+  /* Layout: one narrow centered column; form, then the role panel. */
+  :root {
+    --bg: #f6f6f4; --fg: #1d1d1b; --muted: #6b6b66; --line: #d6d6d0;
+    --btn: #1d1d1b; --btn-fg: #ffffff; --panel: #161615;
+    --obcan: #ffd21f; --vrah: #ff3b30; --detektiv: #34c759;
+    --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg: #161615; --fg: #ececea; --muted: #9a9a94; --line: #3a3a37;
+    --btn: #ececea; --btn-fg: #161615; --panel: #000000; color-scheme: dark } }
+  :root[data-theme="dark"] {
+    --bg: #161615; --fg: #ececea; --muted: #9a9a94; --line: #3a3a37;
+    --btn: #ececea; --btn-fg: #161615; --panel: #000000; color-scheme: dark }
+
+  body { background: var(--bg); color: var(--fg); font-family: var(--font); font-size: 16px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 24px; }
+  main { max-width: 420px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+  h1 { font-size: 1.6rem; margin: 0; }
+  .fields { display: flex; flex-direction: column; gap: 10px; }
+  label { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+  input { width: 80px; font: inherit; padding: 6px 8px; border: 1px solid var(--line);
+    border-radius: 4px; background: var(--bg); color: var(--fg); text-align: right; }
+  button { font: inherit; font-weight: 600; padding: 12px; border: 0; border-radius: 4px;
+    background: var(--btn); color: var(--btn-fg); cursor: pointer; }
+  button:disabled { opacity: .35; cursor: not-allowed; }
+  button:focus-visible, input:focus-visible { outline: 3px solid var(--muted); outline-offset: 2px; }
+  .info { color: var(--muted); margin: 0; font-variant-numeric: tabular-nums; }
+  .error { color: var(--vrah); margin: 0; }
+  #role { background: var(--panel); border-radius: 4px; min-height: 160px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+    cursor: pointer; user-select: none; }
+  #roleText { font-size: clamp(3rem, 16vw, 5rem); font-weight: 800; text-transform: uppercase; letter-spacing: .02em; }
+  #role small { color: #8a8a85; }
+  #roleNum { color: #8a8a85; font-variant-numeric: tabular-nums; }
+  #roleText.waiting { color: #8a8a85; animation: blink .35s ease-in-out infinite alternate; }
+  #roleText.pop { animation: pop .35s cubic-bezier(.2,1.6,.4,1); }
+  @keyframes pop { from { transform: scale(.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  @keyframes blink { from { opacity: .25; } to { opacity: 1; } }
+  @media (prefers-reduced-motion: reduce) { #roleText.pop, #roleText.waiting { animation: none; } }
+</style>
+
+</head>
+<body>
+<main>
+  <h1>Vrazi</h1>
+
+  <div class="fields">
+    <label for="obcane">Občané <input id="obcane" type="number" min="0" value="6"></label>
+    <label for="vrazi">Vrazi <input id="vrazi" type="number" min="0" value="2"></label>
+    <label for="detektivove">Detektivové <input id="detektivove" type="number" min="0" value="1"></label>
+  </div>
+
+  <button id="generate">Generovat</button>
+  <p id="error" class="error" hidden></p>
+
+  <button id="assign" hidden>Přiřadit roli</button>
+  <p id="info" class="info" hidden></p>
+
+  <div id="role" hidden title="Klepnutím skryjete">
+    <span id="roleNum"></span>
+    <span id="roleText"></span>
+    <small>klepnutím skryjete</small>
+  </div>
+</main>
+
+<script>
+  const ROLES = {
+    obcan: { name: "Občan", color: "var(--obcan)" },
+    vrah: { name: "Vrah", color: "var(--vrah)" },
+    detektiv: { name: "Detektiv", color: "var(--detektiv)" },
+  };
+  const $ = (id) => document.getElementById(id);
+  let list = [];
+  let total = 0;
+  let pending = null;
+
+  function randInt(n) {
+    const a = new Uint32Array(1);
+    crypto.getRandomValues(a);
+    return a[0] % n;
+  }
+
+  function shuffle(arr) {
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = randInt(i + 1);
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+  }
+
+  function readCount(id) {
+    const v = Number($(id).value);
+    return Number.isInteger(v) && v >= 0 ? v : null;
+  }
+
+  function updateInfo() {
+    $("info").hidden = false;
+    $("info").textContent = list.length
+      ? `Zbývá rolí: ${list.length} z ${total}`
+      : "Všechny role jsou přiřazené. Pro novou hru vygenerujte nový seznam.";
+    $("assign").disabled = list.length === 0;
+  }
+
+  $("generate").addEventListener("click", () => {
+    const o = readCount("obcane"), v = readCount("vrazi"), d = readCount("detektivove");
+    if (o === null || v === null || d === null) {
+      $("error").textContent = "Počty musí být celá nezáporná čísla.";
+      $("error").hidden = false;
+      return;
+    }
+    if (o + v + d === 0) {
+      $("error").textContent = "Zadejte alespoň jednu roli.";
+      $("error").hidden = false;
+      return;
+    }
+    $("error").hidden = true;
+    list = shuffle([
+      ...Array(o).fill("obcan"),
+      ...Array(v).fill("vrah"),
+      ...Array(d).fill("detektiv"),
+    ]);
+    total = list.length;
+    clearTimeout(pending);
+    pending = null;
+    $("role").hidden = true;
+    $("assign").hidden = false;
+    updateInfo();
+  });
+
+  $("assign").addEventListener("click", () => {
+    if (!list.length || pending) return;
+    const role = ROLES[list.pop()];
+    const text = $("roleText");
+    $("assign").disabled = true;
+    $("roleNum").textContent = `Hráč ${total - list.length} z ${total}`;
+    text.textContent = "···";
+    text.style.color = "";
+    text.className = "waiting";
+    $("role").hidden = false;
+    pending = setTimeout(() => {
+      pending = null;
+      text.textContent = role.name;
+      text.style.color = role.color;
+      text.className = "";
+      void text.offsetWidth;
+      text.className = "pop";
+      updateInfo();
+    }, 700);
+  });
+
+  $("role").addEventListener("click", () => { $("role").hidden = true; });
+</script>
+</body>
+</html>
